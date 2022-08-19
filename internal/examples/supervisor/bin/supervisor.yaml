@@ -1,5 +1,7 @@
 server:
-  endpoint: ws://127.0.0.1:4320/v1/opamp
+  # endpoint: ws://127.0.0.1:4320/v1/opamp
+  endpoint: http://127.0.0.1:8080/v1/opamp
 
 agent:
-  executable: ../../../../../opentelemetry-collector-contrib/bin/otelcontribcol_darwin_amd64
+  executable: ../../../../../opentelemetry-collector-contrib/bin/otelcontribcol_darwin_arm64
+  existingConfigPath: existing_config.yaml

@@ -65,6 +65,9 @@ type Supervisor struct {
 	// Location of the effective config file.
 	effectiveConfigFilePath string
 
+	// config that the collector had independently of the supervisor
+	existingConfig atomic.Value
+
 	// Last received remote config.
 	remoteConfig *protobufs.AgentRemoteConfig
 
@@ -92,6 +95,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 		s.instanceId.String(), agentType, agentVersion)
 
 	s.loadAgentEffectiveConfig()
+	fmt.Println("Loaded effective config")
 
 	if err := s.startOpAMP(); err != nil {
 		return nil, fmt.Errorf("Cannot start OpAMP client: %v", err)
@@ -129,7 +133,8 @@ func (s *Supervisor) loadConfig() error {
 
 func (s *Supervisor) startOpAMP() error {
 
-	s.opampClient = client.NewWebSocket(s.logger)
+	//s.opampClient = client.NewWebSocket(s.logger)
+	s.opampClient = client.NewHTTP(s.logger)
 
 	settings := types.StartSettings{
 		OpAMPServerURL: s.config.Server.Endpoint,
@@ -241,16 +246,14 @@ extensions:
 func (s *Supervisor) loadAgentEffectiveConfig() error {
 	var effectiveConfigBytes []byte
 
-	effFromFile, err := os.ReadFile(s.effectiveConfigFilePath)
-	if err == nil {
-		// We have an effective config file.
-		effectiveConfigBytes = effFromFile
-	} else {
+	if s.config.Agent.ExistingConfigPath == "" {
+		fmt.Println("No existing config path")
 		// No effective config file, just use the initial config.
 		effectiveConfigBytes = []byte(s.composeExtraLocalConfig())
 	}
 
 	s.effectiveConfig.Store(string(effectiveConfigBytes))
+	s.writeEffectiveConfigToFile(string(effectiveConfigBytes), s.effectiveConfigFilePath)
 
 	return nil
 }
@@ -263,6 +266,7 @@ func (s *Supervisor) createEffectiveConfigMsg() *protobufs.EffectiveConfig {
 		cfgStr = ""
 	}
 
+	// This is where the opamp message is created
 	cfg := &protobufs.EffectiveConfig{
 		ConfigMap: &protobufs.AgentConfigMap{
 			ConfigMap: map[string]*protobufs.AgentConfigFile{
@@ -334,7 +338,6 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 	var names []string
 	for name := range config.Config.ConfigMap {
 		if name == "" {
-			// skip instance config
 			continue
 		}
 		names = append(names, name)
@@ -345,9 +348,20 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 	// Append instance config as the last item.
 	names = append(names, "")
 
+	existingCfg, ok := s.existingConfig.Load().(string)
+	if ok {
+		if err := k.Load(rawbytes.Provider([]byte(existingCfg)), yaml.Parser()); err != nil {
+			return false, err
+		}
+	}
+
 	// Merge received configs.
 	for _, name := range names {
+		fmt.Println(name)
 		item := config.Config.ConfigMap[name]
+		if item == nil {
+			continue
+		}
 		var k2 = koanf.New(".")
 		err := k2.Load(rawbytes.Provider(item.Body), yaml.Parser())
 		if err != nil {
