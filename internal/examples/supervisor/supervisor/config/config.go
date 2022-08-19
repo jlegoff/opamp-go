@@ -11,5 +11,6 @@ type OpAMPServer struct {
 }
 
 type Agent struct {
-	Executable string
+	Executable         string
+	ExistingConfigPath string
 }
