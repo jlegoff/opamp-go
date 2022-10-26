@@ -20,7 +20,7 @@ import (
 )
 
 const OpAMPPlainHTTPMethod = "POST"
-const defaultPollingIntervalMs = 30 * 1000 // default interval is 30 seconds.
+const defaultPollingIntervalMs = 2 * 1000 // default interval is 30 seconds.
 
 const headerContentEncoding = "Content-Encoding"
 const encodingTypeGZip = "gzip"
