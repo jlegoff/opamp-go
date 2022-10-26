@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"os"
 	"runtime"
 	"sort"
@@ -141,6 +142,7 @@ func (s *Supervisor) startOpAMP() error {
 	settings := types.StartSettings{
 		OpAMPServerURL: s.config.Server.Endpoint,
 		InstanceUid:    s.instanceId.String(),
+		Header:         http.Header{"api-key": {s.config.Server.ApiKey}},
 		Callbacks: types.CallbacksStruct{
 			OnConnectFunc: func() {
 				s.logger.Debugf("Connected to the server.")
@@ -162,6 +164,8 @@ func (s *Supervisor) startOpAMP() error {
 			protobufs.AgentCapabilities_ReportsOwnMetrics |
 			protobufs.AgentCapabilities_ReportsHealth,
 	}
+	fmt.Println("Instance Id")
+	fmt.Println(s.instanceId.String())
 	err := s.opampClient.SetAgentDescription(s.createAgentDescription())
 	if err != nil {
 		return err

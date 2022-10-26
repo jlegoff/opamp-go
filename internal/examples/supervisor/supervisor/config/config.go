@@ -8,6 +8,7 @@ type Supervisor struct {
 
 type OpAMPServer struct {
 	Endpoint string
+	ApiKey   string
 }
 
 type Agent struct {
