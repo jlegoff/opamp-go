@@ -17,24 +17,26 @@ import (
 // Commander can start/stop/restat the Agent executable and also watch for a signal
 // for the Agent process to finish.
 type Commander struct {
-	logger  types.Logger
-	cfg     *config.Agent
-	args    []string
-	cmd     *exec.Cmd
-	doneCh  chan struct{}
-	waitCh  chan struct{}
-	running int64
+	logger      types.Logger
+	instanceUid string
+	cfg         *config.Agent
+	args        []string
+	cmd         *exec.Cmd
+	doneCh      chan struct{}
+	waitCh      chan struct{}
+	running     int64
 }
 
-func NewCommander(logger types.Logger, cfg *config.Agent, args ...string) (*Commander, error) {
+func NewCommander(logger types.Logger, instanceUid string, cfg *config.Agent, args ...string) (*Commander, error) {
 	if cfg.Executable == "" {
 		return nil, errors.New("agent.executable config option must be specified")
 	}
 
 	return &Commander{
-		logger: logger,
-		cfg:    cfg,
-		args:   args,
+		logger:      logger,
+		instanceUid: instanceUid,
+		cfg:         cfg,
+		args:        args,
 	}, nil
 }
 
@@ -50,6 +52,9 @@ func (c *Commander) Start(ctx context.Context) error {
 	}
 
 	c.cmd = exec.CommandContext(ctx, c.cfg.Executable, c.args...)
+	c.cmd.Env = os.Environ()
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("API_KEY=%s", c.cfg.ApiKey))
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("AGENT_UID=%s", c.instanceUid))
 
 	// Capture standard output and standard error.
 	c.cmd.Stdout = logFile
