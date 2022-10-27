@@ -1,8 +1,7 @@
 server:
   endpoint: https://opamp.staging-service.newrelic.com:443/v1/opamp
-  apiKey: key
+  apiKey: 5aa8ddec9efb79464dcd99d9272db3a5FFFFNRAL
 
 agent:
   executable: ../../../../../opentelemetry-collector-contrib/bin/otelcontribcol_darwin_arm64
-  initialConfigPath: existing_config.yaml
-  apiKey: key
+  apiKey: 5aa8ddec9efb79464dcd99d9272db3a5FFFFNRAL
