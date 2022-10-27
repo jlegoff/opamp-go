@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -187,12 +189,26 @@ func (s *Supervisor) startOpAMP() error {
 }
 
 func (s *Supervisor) createInstanceId() {
-	s.instanceId = ulid.MustParse("01GGCDW2R4Z6MFCR8FZSA3H7H4")
-	// Generate instance id.
-	// entropy := ulid.Monotonic(rand.New(rand.NewSource(0)), 0)
-	// s.instanceId = ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-
-	// TODO: set instanceId in the Collector config.
+	var ulidFileName = "agent.ulid"
+	if _, err := os.Stat(ulidFileName); err == nil {
+		f, err := os.ReadFile(ulidFileName)
+		if err != nil {
+			panic(err)
+		}
+		rawUlid := strings.TrimSuffix(string(f), "\n")
+		s.logger.Debugf("Read ulid %s %s", rawUlid, len(rawUlid))
+		s.instanceId = ulid.MustParse(rawUlid)
+		s.logger.Debugf("Found ulid %s", s.instanceId)
+	} else if errors.Is(err, os.ErrNotExist) {
+		// Generate instance id.
+		entropy := ulid.Monotonic(rand.New(rand.NewSource(0)), 0)
+		s.instanceId = ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
+		s.logger.Debugf("Created ulid %s", s.instanceId)
+		err := os.WriteFile(ulidFileName, []byte(s.instanceId.String()), 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func keyVal(key, val string) *protobufs.KeyValue {
