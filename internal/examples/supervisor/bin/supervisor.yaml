@@ -1,10 +1,8 @@
 server:
-  # endpoint: ws://127.0.0.1:4320/v1/opamp
-  # endpoint: http://staging-opamp-server.vip.cf.nr-ops.net:80/v1/opamp
   endpoint: https://opamp.staging-service.newrelic.com:443/v1/opamp
-  apiKey: 5aa8ddec9efb79464dcd99d9272db3a5FFFFNRAL
+  apiKey: key
 
 agent:
   executable: ../../../../../opentelemetry-collector-contrib/bin/otelcontribcol_darwin_arm64
-  existingConfigPath: existing_config.yaml
-  apiKey: 5aa8ddec9efb79464dcd99d9272db3a5FFFFNRAL
+  initialConfigPath: existing_config.yaml
+  apiKey: key
