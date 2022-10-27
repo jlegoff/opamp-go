@@ -40,6 +40,66 @@ service:
       encoding: json
 `
 
+const initialAgentConfig = `
+extensions:
+  health_check:
+
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'io.opentelemetry.collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+processors:
+  batch:
+  resourcedetection:
+    detectors: [env, system]
+  metricstransform:
+    # these transforms are necessary to generate host entities.
+    # in the future, they won't be necessary (hopefully)
+    transforms:
+      - include: ^otelcol_
+        match_type: regexp
+        action: update
+        operations:
+          - action: add_label
+            new_label: nr.entity_type
+            new_value: otelcol
+          - action: add_label
+            new_label: service.instance.id
+            new_value: "$AGENT_UID"
+          - action: update_label
+            label: service_version
+            new_label: service.version
+exporters:
+  otlp:
+    endpoint: staging-otlp.nr-data.net:4317
+    headers:
+      api-key: "$API_KEY"
+
+service:
+  pipelines:
+    metrics/own:
+      receivers: [prometheus]
+      processors: [batch, resourcedetection, metricstransform]
+      exporters: [otlp]
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888
+    logs:
+      level: debug
+      encoding: json
+      output_paths: collector_log.json
+      initial_fields:
+        service.name: io.opentelemetry.collector
+        nr.entity_type: otelcol
+        service.instance.id: "$AGENT_UID"
+`
+
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
 // to work with an OpAMP Server.
 type Supervisor struct {
@@ -245,7 +305,7 @@ func (s *Supervisor) loadAgentEffectiveConfig() error {
 	if s.config.Agent.InitialConfigPath == "" {
 		fmt.Println("No existing config path")
 		// No effective config file, just use the initial config.
-		effectiveConfigBytes = []byte(localOverrideAgentConfig)
+		effectiveConfigBytes = []byte(initialAgentConfig)
 	} else {
 		fmt.Println("Found existing config path")
 		existingFromFile, err := os.ReadFile(s.config.Agent.InitialConfigPath)
@@ -387,7 +447,7 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 	}
 
 	// Merge local config last since it has the highest precedence.
-	if err := k.Load(rawbytes.Provider([]byte(localOverrideAgentConfig)), yaml.Parser()); err != nil {
+	if err := k.Load(rawbytes.Provider([]byte(initialAgentConfig)), yaml.Parser()); err != nil {
 		return false, err
 	}
 
