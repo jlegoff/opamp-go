@@ -3,7 +3,6 @@ package supervisor
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"os"
 	"runtime"
@@ -107,6 +106,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	var err error
 	s.commander, err = commander.NewCommander(
 		s.logger,
+		s.instanceId.String(),
 		s.config.Agent,
 		"--config", s.effectiveConfigFilePath,
 	)
@@ -189,9 +189,10 @@ func (s *Supervisor) startOpAMP() error {
 }
 
 func (s *Supervisor) createInstanceId() {
+	s.instanceId = ulid.MustParse("01GGCDW2R4Z6MFCR8FZSA3H7H4")
 	// Generate instance id.
-	entropy := ulid.Monotonic(rand.New(rand.NewSource(0)), 0)
-	s.instanceId = ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
+	// entropy := ulid.Monotonic(rand.New(rand.NewSource(0)), 0)
+	// s.instanceId = ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
 
 	// TODO: set instanceId in the Collector config.
 }
