@@ -242,13 +242,13 @@ func (s *Supervisor) createAgentDescription() *protobufs.AgentDescription {
 func (s *Supervisor) loadAgentEffectiveConfig() error {
 	var effectiveConfigBytes []byte
 
-	if s.config.Agent.ExistingConfigPath == "" {
+	if s.config.Agent.InitialConfigPath == "" {
 		fmt.Println("No existing config path")
 		// No effective config file, just use the initial config.
 		effectiveConfigBytes = []byte(localOverrideAgentConfig)
 	} else {
 		fmt.Println("Found existing config path")
-		existingFromFile, err := os.ReadFile(s.config.Agent.ExistingConfigPath)
+		existingFromFile, err := os.ReadFile(s.config.Agent.InitialConfigPath)
 		if err != nil {
 			fmt.Println("Could not read existing config")
 		} else {

@@ -12,7 +12,7 @@ type OpAMPServer struct {
 }
 
 type Agent struct {
-	Executable         string
-	ExistingConfigPath string
-	ApiKey             string
+	Executable        string
+	InitialConfigPath string
+	ApiKey            string
 }
