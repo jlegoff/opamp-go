@@ -103,7 +103,10 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	s.loadAgentEffectiveConfig()
 	fmt.Println("Loaded effective config")
 
-	s.installAgent()
+	installError := s.installAgent("otelcol")
+	if installError != nil {
+		panic(installError)
+	}
 	fmt.Println("Installed otel collector")
 
 	if err := s.startOpAMP(); err != nil {
@@ -286,24 +289,24 @@ func (s *Supervisor) loadAgentEffectiveConfig() error {
 	return nil
 }
 
-func (s *Supervisor) installAgent() error {
+func (s *Supervisor) installAgent(dir string) error {
 	//if len(s.config.Agent.Executable) == 0 {
 	//	return nil
 	//}
-	//if err := os.Mkdir("tmp", os.ModePerm); err != nil {
-	//	log.Fatal(err)
-	//}
-	targz, _ := os.Create("tmp/otelcol_0.62.1_darwin_arm64.tar")
-	defer targz.Close()
-	// Get the data
-	resp, err := http.Get(getAgentUrl())
-	if err != nil {
-		return err
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.Mkdir(dir, os.ModePerm); err != nil {
+		}
 	}
-	defer resp.Body.Close()
-	err = untar("tmp", resp.Body)
-	if err != nil {
-		return err
+	if _, err := os.Stat(filepath.Join(dir, "otelcol")); os.IsNotExist(err) {
+		resp, err := http.Get(getAgentUrl())
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		err = extractCollector(dir, resp.Body)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -312,7 +315,7 @@ func getAgentUrl() string {
 	return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.62.1/otelcol_0.62.1_darwin_arm64.tar.gz"
 }
 
-func untar(dst string, zipped io.Reader) error {
+func extractCollector(dst string, zipped io.Reader) error {
 	unzipped, err := gzip.NewReader(zipped)
 	defer unzipped.Close()
 	if err != nil {
