@@ -1,12 +1,16 @@
 package supervisor
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -161,6 +165,9 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 
 	s.loadAgentEffectiveConfig()
 	fmt.Println("Loaded effective config")
+
+	s.installAgent()
+	fmt.Println("Installed otel collector")
 
 	if err := s.startOpAMP(); err != nil {
 		return nil, fmt.Errorf("Cannot start OpAMP client: %v", err)
@@ -320,6 +327,70 @@ func (s *Supervisor) loadAgentEffectiveConfig() error {
 	s.effectiveConfig.Store(string(effectiveConfigBytes))
 	s.writeEffectiveConfigToFile(string(effectiveConfigBytes), s.effectiveConfigFilePath)
 
+	return nil
+}
+
+func (s *Supervisor) installAgent() error {
+	//if len(s.config.Agent.Executable) == 0 {
+	//	return nil
+	//}
+	//if err := os.Mkdir("tmp", os.ModePerm); err != nil {
+	//	log.Fatal(err)
+	//}
+	targz, _ := os.Create("tmp/otelcol_0.62.1_darwin_arm64.tar")
+	defer targz.Close()
+	// Get the data
+	resp, err := http.Get(getAgentUrl())
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	err = untar("tmp", resp.Body)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getAgentUrl() string {
+	return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.62.1/otelcol_0.62.1_darwin_arm64.tar.gz"
+}
+
+func untar(dst string, zipped io.Reader) error {
+	unzipped, err := gzip.NewReader(zipped)
+	defer unzipped.Close()
+	if err != nil {
+		panic(err)
+	}
+	tr := tar.NewReader(unzipped)
+	for {
+		header, err := tr.Next()
+		switch {
+
+		// if no more files are found return
+		case err == io.EOF:
+			return nil
+
+		// return any other error
+		case err != nil:
+			return err
+
+		// if the header is nil, just skip it (not sure how this happens)
+		case header == nil:
+			continue
+		}
+		if "otelcol" == header.Name {
+			target := filepath.Join(dst, header.Name)
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				return err
+			}
+			f.Close()
+		}
+	}
 	return nil
 }
 
