@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 // for the Agent process to finish.
 type Commander struct {
 	logger      types.Logger
+	logDir      string
 	instanceUid string
 	cfg         *config.Agent
 	args        []string
@@ -25,13 +27,14 @@ type Commander struct {
 	waitCh      chan struct{}
 }
 
-func NewCommander(logger types.Logger, instanceUid string, cfg *config.Agent, args ...string) (*Commander, error) {
+func NewCommander(logger types.Logger, logDir string, instanceUid string, cfg *config.Agent, args ...string) (*Commander, error) {
 	if cfg.Executable == "" {
 		return nil, errors.New("agent.executable config option must be specified")
 	}
 
 	return &Commander{
 		logger:      logger,
+		logDir:      logDir,
 		instanceUid: instanceUid,
 		cfg:         cfg,
 		args:        args,
@@ -43,7 +46,7 @@ func NewCommander(logger types.Logger, instanceUid string, cfg *config.Agent, ar
 func (c *Commander) Start(ctx context.Context) error {
 	c.logger.Debugf("Starting agent %s", c.cfg.Executable)
 
-	logFilePath := "agent.log"
+	logFilePath := filepath.Join(c.logDir, "agent.log")
 	logFile, err := os.Create(logFilePath)
 	if err != nil {
 		return fmt.Errorf("cannot create %s: %s", logFilePath, err.Error())

@@ -123,6 +123,12 @@ type Supervisor struct {
 	// Agent's instance id.
 	instanceId ulid.ULID
 
+	// where to store data files, e.g. agent logs or agent ulid
+	dataDir string
+
+	// where to store agent binaries
+	agentDir string
+
 	// A config section to be added to the Collector's config to fetch its own metrics.
 	// TODO: store this persistently so that when starting we can compose the effective
 	// config correctly.
@@ -151,22 +157,24 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	s := &Supervisor{
 		logger:                  logger,
 		agentVersion:            agentVersion,
+		dataDir:                 "data",
+		agentDir:                "agent",
 		hasNewConfig:            make(chan struct{}, 1),
-		effectiveConfigFilePath: "effective.yaml",
+		effectiveConfigFilePath: filepath.Join("data", "effective.yaml"),
 	}
 
 	if err := s.loadConfig(); err != nil {
 		return nil, fmt.Errorf("Error loading config: %v", err)
 	}
 
-	s.createInstanceId()
+	s.createInstanceId(s.dataDir)
 	logger.Debugf("Supervisor starting, id=%v, type=%s, version=%s.",
 		s.instanceId.String(), agentType, agentVersion)
 
 	s.loadAgentEffectiveConfig()
 	fmt.Println("Loaded effective config")
 
-	installError := s.installAgent("otelcol")
+	installError := s.installAgent(s.agentDir)
 	if installError != nil {
 		panic(installError)
 	}
@@ -177,11 +185,25 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	}
 
 	var err error
+	apiKey := s.config.Server.ApiKey
+	if s.config.Agent != nil && s.config.Agent.ApiKey != "" {
+		apiKey = s.config.Agent.ApiKey
+	}
+	executable := filepath.Join(s.agentDir, "otelcol-contrib")
+	if s.config.Agent != nil && s.config.Agent.Executable != "" {
+		executable = s.config.Agent.Executable
+	}
+
+	agent := &config.Agent{
+		ApiKey:     apiKey,
+		Executable: executable,
+	}
 	s.commander, err = commander.NewCommander(
 		s.logger,
+		s.dataDir,
 		s.instanceId.String(),
-		s.config.Agent,
-		"--config", s.effectiveConfigFilePath,
+		agent,
+		"--config", filepath.Join(s.effectiveConfigFilePath),
 	)
 	if err != nil {
 		return nil, err
@@ -261,8 +283,8 @@ func (s *Supervisor) startOpAMP() error {
 	return nil
 }
 
-func (s *Supervisor) createInstanceId() {
-	var ulidFileName = "agent.ulid"
+func (s *Supervisor) createInstanceId(dir string) {
+	var ulidFileName = filepath.Join(dir, "agent.ulid")
 	if _, err := os.Stat(ulidFileName); err == nil {
 		f, err := os.ReadFile(ulidFileName)
 		if err != nil {
@@ -311,22 +333,7 @@ func (s *Supervisor) createAgentDescription() *protobufs.AgentDescription {
 
 func (s *Supervisor) loadAgentEffectiveConfig() error {
 	var effectiveConfigBytes []byte
-
-	if s.config.Agent.InitialConfigPath == "" {
-		fmt.Println("No existing config path")
-		// No effective config file, just use the initial config.
-		effectiveConfigBytes = []byte(initialAgentConfig)
-	} else {
-		fmt.Println("Found existing config path")
-		existingFromFile, err := os.ReadFile(s.config.Agent.InitialConfigPath)
-		if err != nil {
-			fmt.Println("Could not read existing config")
-		} else {
-			effectiveConfigBytes = existingFromFile
-			s.existingConfig.Store(string(existingFromFile))
-		}
-	}
-
+	effectiveConfigBytes = []byte(initialAgentConfig)
 	s.effectiveConfig.Store(string(effectiveConfigBytes))
 	s.writeEffectiveConfigToFile(string(effectiveConfigBytes), s.effectiveConfigFilePath)
 
@@ -341,7 +348,8 @@ func (s *Supervisor) installAgent(dir string) error {
 		if err := os.Mkdir(dir, os.ModePerm); err != nil {
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "otelcol")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "otelcol-contrib")); os.IsNotExist(err) {
+		s.logger.Debugf("Downloading the otel collector")
 		resp, err := http.Get(getAgentUrl())
 		if err != nil {
 			return err
@@ -356,7 +364,8 @@ func (s *Supervisor) installAgent(dir string) error {
 }
 
 func getAgentUrl() string {
-	return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.62.1/otelcol_0.62.1_darwin_arm64.tar.gz"
+	//return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.62.1/otelcol_0.62.1_darwin_arm64.tar.gz"
+	return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.63.1/otelcol-contrib_0.63.1_linux_amd64.tar.gz"
 }
 
 func extractCollector(dst string, zipped io.Reader) error {
@@ -382,7 +391,7 @@ func extractCollector(dst string, zipped io.Reader) error {
 		case header == nil:
 			continue
 		}
-		if "otelcol" == header.Name {
+		if "otelcol-contrib" == header.Name {
 			target := filepath.Join(dst, header.Name)
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
 			if err != nil {
