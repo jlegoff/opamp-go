@@ -32,8 +32,7 @@ import (
 // This Supervisor is developed specifically for OpenTelemetry Collector.
 const agentType = "io.opentelemetry.collector"
 
-// TODO: fetch agent version from Collector executable or by some other means.
-const agentVersion = "1.0.0"
+const agentVersion = "0.63.1"
 
 // A Collector config that should be always applied.
 // Enables JSON log output for the Agent.
@@ -74,9 +73,6 @@ processors:
           - action: add_label
             new_label: service.instance.id
             new_value: "$AGENT_UID"
-          - action: update_label
-            label: service_version
-            new_label: service.version
 exporters:
   otlp:
     endpoint: staging-otlp.nr-data.net:4317
@@ -364,8 +360,8 @@ func (s *Supervisor) installAgent(dir string) error {
 }
 
 func getAgentUrl() string {
-	//return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.62.1/otelcol_0.62.1_darwin_arm64.tar.gz"
-	return "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.63.1/otelcol-contrib_0.63.1_linux_amd64.tar.gz"
+	return fmt.Sprintf("https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v%s/otelcol-contrib_%s_%s_%s.tar.gz",
+		agentVersion, agentVersion, runtime.GOOS, runtime.GOARCH)
 }
 
 func extractCollector(dst string, zipped io.Reader) error {
