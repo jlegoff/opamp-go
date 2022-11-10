@@ -34,18 +34,11 @@ const agentType = "io.opentelemetry.collector"
 
 const agentVersion = "0.63.1"
 
-// A Collector config that should be always applied.
-// Enables JSON log output for the Agent.
-const localOverrideAgentConfig = `
-service:
-  telemetry:
-    logs:
-      encoding: json
-`
-
 const initialAgentConfig = `
 extensions:
   health_check:
+  file_storage:
+    directory: data
 
 receivers:
   prometheus:
@@ -85,19 +78,11 @@ service:
       receivers: [prometheus]
       processors: [batch, resourcedetection, metricstransform]
       exporters: [otlp]
-  extensions: [health_check]
+  extensions: [health_check, file_storage]
   telemetry:
     metrics:
       level: detailed
       address: 0.0.0.0:8888
-    logs:
-      level: debug
-      encoding: json
-      output_paths: collector_log.json
-      initial_fields:
-        service.name: io.opentelemetry.collector
-        nr.entity_type: otelcol
-        service.instance.id: "$AGENT_UID"
 `
 
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
@@ -620,7 +605,6 @@ func (s *Supervisor) applyConfigWithAgentRestart() {
 	s.writeEffectiveConfigToFile(cfg, s.effectiveConfigFilePath)
 	s.startAgent()
 }
-
 func (s *Supervisor) writeEffectiveConfigToFile(cfg string, filePath string) {
 	f, err := os.Create(filePath)
 	if err != nil {
