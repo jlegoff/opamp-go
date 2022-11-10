@@ -34,8 +34,58 @@ import (
 // This Supervisor is developed specifically for OpenTelemetry Collector.
 const agentType = "io.opentelemetry.collector"
 
-// TODO: fetch agent version from Collector executable or by some other means.
-const agentVersion = "1.0.0"
+const agentVersion = "0.63.1"
+
+const initialAgentConfig = `
+extensions:
+  health_check:
+  file_storage:
+    directory: data
+
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'io.opentelemetry.collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+processors:
+  batch:
+  resourcedetection:
+    detectors: [env, system]
+  metricstransform:
+    # these transforms are necessary to generate host entities.
+    # in the future, they won't be necessary (hopefully)
+    transforms:
+      - include: ^otelcol_
+        match_type: regexp
+        action: update
+        operations:
+          - action: add_label
+            new_label: nr.entity_type
+            new_value: otelcol
+          - action: add_label
+            new_label: service.instance.id
+            new_value: "$AGENT_UID"
+exporters:
+  otlp:
+    endpoint: staging-otlp.nr-data.net:4317
+    headers:
+      api-key: "$API_KEY"
+
+service:
+  pipelines:
+    metrics/own:
+      receivers: [prometheus]
+      processors: [batch, resourcedetection, metricstransform]
+      exporters: [otlp]
+  extensions: [health_check, file_storage]
+  telemetry:
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888
+`
 
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
 // to work with an OpAMP Server.
@@ -641,7 +691,6 @@ func (s *Supervisor) stopAgentApplyConfig() {
 	s.commander.Stop(context.Background())
 	s.writeEffectiveConfigToFile(cfg, s.effectiveConfigFilePath)
 }
-
 func (s *Supervisor) writeEffectiveConfigToFile(cfg string, filePath string) {
 	f, err := os.Create(filePath)
 	if err != nil {
