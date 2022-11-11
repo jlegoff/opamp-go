@@ -485,7 +485,7 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 
 	// Merge received configs.
 	for _, name := range names {
-		fmt.Println(name)
+		s.logger.Debugf("Received remote configuration %s", name)
 		item := config.Config.ConfigMap[name]
 		if item == nil {
 			continue
