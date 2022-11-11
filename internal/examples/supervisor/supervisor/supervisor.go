@@ -155,13 +155,11 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 		s.instanceId.String(), agentType, agentVersion)
 
 	s.loadAgentEffectiveConfig()
-	fmt.Println("Loaded effective config")
 
 	installError := s.installAgent(s.agentDir)
 	if installError != nil {
 		panic(installError)
 	}
-	fmt.Println("Installed otel collector")
 
 	if err := s.startOpAMP(); err != nil {
 		return nil, fmt.Errorf("Cannot start OpAMP client: %v", err)
@@ -242,8 +240,6 @@ func (s *Supervisor) startOpAMP() error {
 			protobufs.AgentCapabilities_ReportsOwnMetrics |
 			protobufs.AgentCapabilities_ReportsHealth,
 	}
-	fmt.Println("Instance Id")
-	fmt.Println(s.instanceId.String())
 	err := s.opampClient.SetAgentDescription(s.createAgentDescription())
 	if err != nil {
 		return err
@@ -281,9 +277,8 @@ func (s *Supervisor) createInstanceId(dir string) {
 			panic(err)
 		}
 		rawUlid := strings.TrimSuffix(string(f), "\n")
-		s.logger.Debugf("Read ulid %s %s", rawUlid, len(rawUlid))
 		s.instanceId = ulid.MustParse(rawUlid)
-		s.logger.Debugf("Found ulid %s", s.instanceId)
+		s.logger.Debugf("Found existing ulid %s", s.instanceId)
 	} else if errors.Is(err, os.ErrNotExist) {
 		// Generate instance id.
 		entropy := ulid.Monotonic(rand.New(rand.NewSource(0)), 0)
@@ -343,6 +338,7 @@ func (s *Supervisor) installAgent(dir string) error {
 		if err != nil {
 			return err
 		}
+		s.logger.Debugf("Installed the otel collector")
 	}
 	return nil
 }
