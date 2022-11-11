@@ -144,6 +144,8 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 		effectiveConfigFilePath: filepath.Join("data", "effective.yaml"),
 	}
 
+	s.ensureDirExists(s.dataDir)
+
 	if err := s.loadConfig(); err != nil {
 		return nil, fmt.Errorf("Error loading config: %v", err)
 	}
@@ -264,6 +266,13 @@ func (s *Supervisor) startOpAMP() error {
 	return nil
 }
 
+func (s *Supervisor) ensureDirExists(dir string) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.Mkdir(dir, os.ModePerm); err != nil {
+		}
+	}
+}
+
 func (s *Supervisor) createInstanceId(dir string) {
 	var ulidFileName = filepath.Join(dir, "agent.ulid")
 	if _, err := os.Stat(ulidFileName); err == nil {
@@ -322,13 +331,7 @@ func (s *Supervisor) loadAgentEffectiveConfig() error {
 }
 
 func (s *Supervisor) installAgent(dir string) error {
-	//if len(s.config.Agent.Executable) == 0 {
-	//	return nil
-	//}
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.Mkdir(dir, os.ModePerm); err != nil {
-		}
-	}
+	s.ensureDirExists(dir)
 	if _, err := os.Stat(filepath.Join(dir, "otelcol-contrib")); os.IsNotExist(err) {
 		s.logger.Debugf("Downloading the otel collector")
 		resp, err := http.Get(getAgentUrl())
