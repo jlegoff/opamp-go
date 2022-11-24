@@ -41,7 +41,7 @@ extensions:
     directory: data
 
 receivers:
-  prometheus:
+  prometheus/own:
     config:
       scrape_configs:
         - job_name: 'io.opentelemetry.collector'
@@ -51,21 +51,26 @@ receivers:
 processors:
   batch:
   resourcedetection:
-    detectors: [env, system]
-  metricstransform:
-    # these transforms are necessary to generate host entities.
-    # in the future, they won't be necessary (hopefully)
-    transforms:
-      - include: ^otelcol_
-        match_type: regexp
-        action: update
-        operations:
-          - action: add_label
-            new_label: nr.entity_type
-            new_value: otelcol
-          - action: add_label
-            new_label: service.instance.id
-            new_value: "$AGENT_UID"
+    detectors: [env, system, ec2]
+  resource/own:
+    attributes:
+      - key: service.name
+        value: io.opentelemetry.collector
+        action: upsert
+      - key: service.instance.id
+        value: "$AGENT_UID"
+        action: upsert
+      - key: nr.entity_type
+        value: otelcol
+        action: upsert
+  attributes/own:
+    actions:
+      - key: service_name
+        action: delete
+      - key: service_instance_id
+        action: delete
+      - key: service_version
+        action: delete
 exporters:
   otlp:
     endpoint: staging-otlp.nr-data.net:4317
@@ -75,14 +80,18 @@ exporters:
 service:
   pipelines:
     metrics/own:
-      receivers: [prometheus]
-      processors: [batch, resourcedetection, metricstransform]
+      receivers: [prometheus/own]
+      processors: [batch, resourcedetection, resource/own, attributes/own]
       exporters: [otlp]
   extensions: [health_check, file_storage]
   telemetry:
     metrics:
       level: detailed
       address: 0.0.0.0:8888
+    resource:
+      service.name: %s
+      service.version: %s
+      service.instance.id: %s
 `
 
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
@@ -318,11 +327,15 @@ func (s *Supervisor) createAgentDescription() *protobufs.AgentDescription {
 
 func (s *Supervisor) loadAgentEffectiveConfig() error {
 	var effectiveConfigBytes []byte
-	effectiveConfigBytes = []byte(initialAgentConfig)
+	effectiveConfigBytes = []byte(s.getInitialConfig())
 	s.effectiveConfig.Store(string(effectiveConfigBytes))
 	s.writeEffectiveConfigToFile(string(effectiveConfigBytes), s.effectiveConfigFilePath)
 
 	return nil
+}
+
+func (s *Supervisor) getInitialConfig() string {
+	return fmt.Sprintf(initialAgentConfig, agentType, agentVersion, s.instanceId)
 }
 
 func (s *Supervisor) installAgent(dir string) error {
@@ -485,7 +498,9 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 
 	// Merge received configs.
 	for _, name := range names {
-		s.logger.Debugf("Received remote configuration %s", name)
+		if name != "" {
+			s.logger.Debugf("Applying remote configuration %s", name)
+		}
 		item := config.Config.ConfigMap[name]
 		if item == nil {
 			continue
@@ -510,7 +525,7 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 	}
 
 	// Merge local config last since it has the highest precedence.
-	if err := k.Load(rawbytes.Provider([]byte(initialAgentConfig)), yaml.Parser()); err != nil {
+	if err := k.Load(rawbytes.Provider([]byte(s.getInitialConfig())), yaml.Parser()); err != nil {
 		return false, err
 	}
 
