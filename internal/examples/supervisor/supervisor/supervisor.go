@@ -32,10 +32,17 @@ import (
 // This Supervisor is developed specifically for OpenTelemetry Collector.
 const agentType = "io.opentelemetry.collector"
 
-const agentVersion = "0.63.1"
+const agentVersion = "0.0.1"
 
-const initialAgentConfig = `
-extensions:
+const NRINFRA_BASE_DIR = "nrinfra"
+
+var NRINFRA_CONFIG_DIR = filepath.Join(NRINFRA_BASE_DIR, "config")
+var NRINFRA_CONFIG_FILE_PATH = filepath.Join(NRINFRA_CONFIG_DIR, "newrelic-infra.yaml")
+var NRINFRA_INTEGRATIONS_BIN_DIR = filepath.Join(NRINFRA_BASE_DIR, "db", "newrelic-integrations", "bin")
+var NRINFRA_INTEGRATIONS_AGENT_DIR = filepath.Join(NRINFRA_BASE_DIR, "db")
+var NRINFRA_INTEGRATIONS_CONFIG_DIR = filepath.Join(NRINFRA_CONFIG_DIR, "integrations.d")
+
+const initialAgentConfig = `extensions:
   health_check:
   file_storage:
     directory: data
@@ -92,6 +99,10 @@ service:
       service.name: %s
       service.version: %s
       service.instance.id: %s
+`
+
+const INFRA_AGENT_CONFIG = `license_key: {{API_KEY}}
+staging: true
 `
 
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
@@ -154,6 +165,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	}
 
 	s.ensureDirExists(s.dataDir)
+	s.ensureInfraDataExists()
 
 	if err := s.loadConfig(); err != nil {
 		return nil, fmt.Errorf("Error loading config: %v", err)
@@ -165,7 +177,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 
 	s.loadAgentEffectiveConfig()
 
-	installError := s.installAgent(s.agentDir)
+	installError := s.installAgent()
 	if installError != nil {
 		panic(installError)
 	}
@@ -179,7 +191,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	if s.config.Agent != nil && s.config.Agent.ApiKey != "" {
 		apiKey = s.config.Agent.ApiKey
 	}
-	executable := filepath.Join(s.agentDir, "otelcol-contrib")
+	executable := filepath.Join(s.agentDir, "nrdot")
 	if s.config.Agent != nil && s.config.Agent.Executable != "" {
 		executable = s.config.Agent.Executable
 	}
@@ -278,6 +290,18 @@ func (s *Supervisor) ensureDirExists(dir string) {
 	}
 }
 
+func (s *Supervisor) ensureInfraDataExists() {
+	infra_dirs := []string{NRINFRA_CONFIG_DIR, NRINFRA_INTEGRATIONS_CONFIG_DIR, NRINFRA_INTEGRATIONS_BIN_DIR}
+	for _, dir := range infra_dirs {
+		real_dir := filepath.Join(s.dataDir, dir)
+		if _, err := os.Stat(real_dir); os.IsNotExist(err) {
+			if err := os.MkdirAll(real_dir, os.ModePerm); err != nil {
+			}
+		}
+	}
+	s.writeInfraAgentConfigToFile()
+}
+
 func (s *Supervisor) createInstanceId(dir string) {
 	var ulidFileName = filepath.Join(dir, "agent.ulid")
 	if _, err := os.Stat(ulidFileName); err == nil {
@@ -338,30 +362,30 @@ func (s *Supervisor) getInitialConfig() string {
 	return fmt.Sprintf(initialAgentConfig, agentType, agentVersion, s.instanceId)
 }
 
-func (s *Supervisor) installAgent(dir string) error {
-	s.ensureDirExists(dir)
-	if _, err := os.Stat(filepath.Join(dir, "otelcol-contrib")); os.IsNotExist(err) {
-		s.logger.Debugf("Downloading the otel collector")
+func (s *Supervisor) installAgent() error {
+	s.ensureDirExists(s.agentDir)
+	if _, err := os.Stat(filepath.Join(s.agentDir, "nrdot")); os.IsNotExist(err) {
+		s.logger.Debugf("Downloading NRDOT")
 		resp, err := http.Get(getAgentUrl())
 		if err != nil {
 			return err
 		}
 		defer resp.Body.Close()
-		err = extractCollector(dir, resp.Body)
+		err = extractCollector(s.agentDir, filepath.Join(s.dataDir, NRINFRA_INTEGRATIONS_BIN_DIR), resp.Body)
 		if err != nil {
 			return err
 		}
-		s.logger.Debugf("Installed the otel collector")
+		s.logger.Debugf("Installed NRDOT")
 	}
 	return nil
 }
 
 func getAgentUrl() string {
-	return fmt.Sprintf("https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v%s/otelcol-contrib_%s_%s_%s.tar.gz",
-		agentVersion, agentVersion, runtime.GOOS, runtime.GOARCH)
+	return fmt.Sprintf("https://jlegoff-next-gen-paris.s3.eu-west-3.amazonaws.com/nrdot_%s_%s_%s.tar.gz",
+		agentVersion, runtime.GOOS, runtime.GOARCH)
 }
 
-func extractCollector(dst string, zipped io.Reader) error {
+func extractCollector(agentDir string, integrationsDir string, zipped io.Reader) error {
 	unzipped, err := gzip.NewReader(zipped)
 	defer unzipped.Close()
 	if err != nil {
@@ -384,17 +408,35 @@ func extractCollector(dst string, zipped io.Reader) error {
 		case header == nil:
 			continue
 		}
-		if "otelcol-contrib" == header.Name {
-			target := filepath.Join(dst, header.Name)
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				return err
-			}
-			f.Close()
+
+		fmt.Println("Header", header.Name)
+		err = extractFile(agentDir, "nrdot", header, tr)
+		if err != nil {
+			return err
 		}
+		err = extractFile(agentDir, "newrelic-infra", header, tr)
+		if err != nil {
+			return err
+		}
+		err = extractFile(integrationsDir, "nri-flex", header, tr)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func extractFile(dst string, filename string, header *tar.Header, tr *tar.Reader) error {
+	if fmt.Sprintf("nrdot_%s_%s_%s/%s", agentVersion, runtime.GOOS, runtime.GOARCH, filename) == header.Name {
+		target := filepath.Join(dst, filename)
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(f, tr); err != nil {
+			return err
+		}
+		f.Close()
 	}
 	return nil
 }
@@ -627,6 +669,16 @@ func (s *Supervisor) writeEffectiveConfigToFile(cfg string, filePath string) {
 	defer f.Close()
 
 	f.WriteString(cfg)
+}
+
+func (s *Supervisor) writeInfraAgentConfigToFile() {
+	f, err := os.Create(filepath.Join(s.dataDir, NRINFRA_CONFIG_FILE_PATH))
+	if err != nil {
+		s.logger.Errorf("Cannot write infra agent config file: %v", err)
+	}
+	defer f.Close()
+
+	f.WriteString(INFRA_AGENT_CONFIG)
 }
 
 func (s *Supervisor) Shutdown() {

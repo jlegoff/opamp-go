@@ -14,6 +14,14 @@ import (
 	"github.com/open-telemetry/opamp-go/internal/examples/supervisor/supervisor/config"
 )
 
+const NRINFRA_BASE_DIR = "nrinfra"
+
+var NRINFRA_CONFIG_DIR = filepath.Join(NRINFRA_BASE_DIR, "config")
+var NRINFRA_CONFIG_FILE_PATH = filepath.Join(NRINFRA_CONFIG_DIR, "newrelic-infra.yaml")
+var NRINFRA_INTEGRATIONS_BIN_DIR = filepath.Join(NRINFRA_BASE_DIR, "db", "newrelic-integrations", "bin")
+var NRINFRA_INTEGRATIONS_AGENT_DIR = filepath.Join(NRINFRA_BASE_DIR, "db")
+var NRINFRA_INTEGRATIONS_CONFIG_DIR = filepath.Join(NRINFRA_CONFIG_FILE_PATH, "integrations.d")
+
 // Commander can start/stop/restat the Agent executable and also watch for a signal
 // for the Agent process to finish.
 type Commander struct {
@@ -57,6 +65,22 @@ func (c *Commander) Start(ctx context.Context) error {
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("API_KEY=%s", c.cfg.ApiKey))
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("AGENT_UID=%s", c.instanceUid))
 
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	baseDir := filepath.Dir(ex)
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_CONFIG_PATH=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_FILE_PATH)))
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_AGENT_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_INTEGRATIONS_AGENT_DIR)))
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
+	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
+
+	fmt.Println(fmt.Sprintf("NRIA_CONFIG_PATH=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_FILE_PATH)))
+	fmt.Println(fmt.Sprintf("NRIA_AGENT_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_INTEGRATIONS_AGENT_DIR)))
+	fmt.Println(fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
+	fmt.Println(fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
+	fmt.Println(fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
 	// Capture standard output and standard error.
 	c.cmd.Stdout = logFile
 	c.cmd.Stderr = logFile
