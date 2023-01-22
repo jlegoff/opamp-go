@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -136,6 +137,9 @@ type Supervisor struct {
 	// config that the collector had independently of the supervisor
 	existingConfig atomic.Value
 
+	// nr integration configs received by the server
+	nrIntegrationConfigs map[string][]byte
+
 	// Last received remote config.
 	remoteConfig *protobufs.AgentRemoteConfig
 
@@ -153,6 +157,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 		dataDir:                 "data",
 		agentDir:                "agent",
 		hasNewConfig:            make(chan struct{}, 1),
+		nrIntegrationConfigs:    map[string][]byte{},
 		effectiveConfigFilePath: filepath.Join("data", "effective.yaml"),
 	}
 
@@ -498,6 +503,40 @@ service:
 	return configChanged
 }
 
+func isInfraConfig(name string, content *protobufs.AgentConfigFile) bool {
+	return strings.HasPrefix(name, "nrinfra")
+
+}
+
+func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfig) error {
+	for name, content := range config.Config.ConfigMap {
+		if !isInfraConfig(name, content) {
+			continue
+		}
+		existingConfig, hasExistingConfig := s.nrIntegrationConfigs[name]
+		if hasExistingConfig {
+			if bytes.Compare(existingConfig, content.Body) == 0 {
+				continue
+			}
+		}
+		s.writeInfraIntegrationConfigToFile(name, content.Body)
+		s.nrIntegrationConfigs[name] = content.Body
+	}
+	return nil
+}
+
+func (s *Supervisor) writeInfraIntegrationConfigToFile(filename string, content []byte) {
+	path := filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR, fmt.Sprintf("%s.yml", filename))
+	s.logger.Debugf("Writing nr integration path: %s", path)
+	f, err := os.Create(path)
+	if err != nil {
+		s.logger.Errorf("Cannot write infra agent config file: %v", err)
+	}
+	defer f.Close()
+
+	f.Write(content)
+}
+
 // composeEffectiveConfig composes the effective config from multiple sources:
 // 1) the remote config from OpAMP Server, 2) the own metrics config section,
 // 3) the local override config that is hard-coded in the Supervisor.
@@ -536,7 +575,7 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 			s.logger.Debugf("Applying remote configuration %s", name)
 		}
 		item := config.Config.ConfigMap[name]
-		if item == nil {
+		if item == nil || isInfraConfig(name, item) {
 			continue
 		}
 		var k2 = koanf.New(".")
@@ -590,6 +629,7 @@ func (s *Supervisor) recalcEffectiveConfig() (configChanged bool, err error) {
 		s.logger.Errorf("Error composing effective config. Ignoring received config: %v", err)
 		return configChanged, err
 	}
+	s.findAndWriteInfraConfigs(s.remoteConfig)
 
 	return configChanged, nil
 }
