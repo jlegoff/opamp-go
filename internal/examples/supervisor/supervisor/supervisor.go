@@ -34,14 +34,6 @@ const agentType = "io.opentelemetry.collector"
 
 const agentVersion = "0.0.1"
 
-const NRINFRA_BASE_DIR = "nrinfra"
-
-var NRINFRA_CONFIG_DIR = filepath.Join(NRINFRA_BASE_DIR, "config")
-var NRINFRA_CONFIG_FILE_PATH = filepath.Join(NRINFRA_CONFIG_DIR, "newrelic-infra.yaml")
-var NRINFRA_INTEGRATIONS_BIN_DIR = filepath.Join(NRINFRA_BASE_DIR, "db", "newrelic-integrations", "bin")
-var NRINFRA_INTEGRATIONS_AGENT_DIR = filepath.Join(NRINFRA_BASE_DIR, "db")
-var NRINFRA_INTEGRATIONS_CONFIG_DIR = filepath.Join(NRINFRA_CONFIG_DIR, "integrations.d")
-
 const initialAgentConfig = `extensions:
   health_check:
   file_storage:
@@ -291,7 +283,7 @@ func (s *Supervisor) ensureDirExists(dir string) {
 }
 
 func (s *Supervisor) ensureInfraDataExists() {
-	infra_dirs := []string{NRINFRA_CONFIG_DIR, NRINFRA_INTEGRATIONS_CONFIG_DIR, NRINFRA_INTEGRATIONS_BIN_DIR}
+	infra_dirs := []string{commander.NRINFRA_CONFIG_DIR, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR, commander.NRINFRA_INTEGRATIONS_BIN_DIR}
 	for _, dir := range infra_dirs {
 		real_dir := filepath.Join(s.dataDir, dir)
 		if _, err := os.Stat(real_dir); os.IsNotExist(err) {
@@ -371,7 +363,7 @@ func (s *Supervisor) installAgent() error {
 			return err
 		}
 		defer resp.Body.Close()
-		err = extractCollector(s.agentDir, filepath.Join(s.dataDir, NRINFRA_INTEGRATIONS_BIN_DIR), resp.Body)
+		err = extractCollector(s.agentDir, filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_BIN_DIR), resp.Body)
 		if err != nil {
 			return err
 		}
@@ -672,7 +664,7 @@ func (s *Supervisor) writeEffectiveConfigToFile(cfg string, filePath string) {
 }
 
 func (s *Supervisor) writeInfraAgentConfigToFile() {
-	f, err := os.Create(filepath.Join(s.dataDir, NRINFRA_CONFIG_FILE_PATH))
+	f, err := os.Create(filepath.Join(s.dataDir, commander.NRINFRA_CONFIG_FILE_PATH))
 	if err != nil {
 		s.logger.Errorf("Cannot write infra agent config file: %v", err)
 	}

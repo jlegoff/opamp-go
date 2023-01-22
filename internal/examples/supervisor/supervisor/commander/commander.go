@@ -18,9 +18,11 @@ const NRINFRA_BASE_DIR = "nrinfra"
 
 var NRINFRA_CONFIG_DIR = filepath.Join(NRINFRA_BASE_DIR, "config")
 var NRINFRA_CONFIG_FILE_PATH = filepath.Join(NRINFRA_CONFIG_DIR, "newrelic-infra.yaml")
-var NRINFRA_INTEGRATIONS_BIN_DIR = filepath.Join(NRINFRA_BASE_DIR, "db", "newrelic-integrations", "bin")
 var NRINFRA_INTEGRATIONS_AGENT_DIR = filepath.Join(NRINFRA_BASE_DIR, "db")
-var NRINFRA_INTEGRATIONS_CONFIG_DIR = filepath.Join(NRINFRA_CONFIG_FILE_PATH, "integrations.d")
+var NRINFRA_INTEGRATIONS_BIN_DIR = filepath.Join(NRINFRA_BASE_DIR, "db", "newrelic-integrations", "bin")
+
+// FIXME this should be a different one, but the agent config dire cannot be overriden
+var NRINFRA_INTEGRATIONS_CONFIG_DIR = filepath.Join(NRINFRA_BASE_DIR, "db", "integrations.d")
 
 // Commander can start/stop/restat the Agent executable and also watch for a signal
 // for the Agent process to finish.
@@ -72,13 +74,15 @@ func (c *Commander) Start(ctx context.Context) error {
 	baseDir := filepath.Dir(ex)
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_CONFIG_PATH=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_FILE_PATH)))
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_AGENT_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_INTEGRATIONS_AGENT_DIR)))
-	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
+
+	// FIXME this option doesn't work
+	//c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
 
 	fmt.Println(fmt.Sprintf("NRIA_CONFIG_PATH=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_FILE_PATH)))
 	fmt.Println(fmt.Sprintf("NRIA_AGENT_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_INTEGRATIONS_AGENT_DIR)))
-	fmt.Println(fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
+	//fmt.Println(fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
 	fmt.Println(fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
 	fmt.Println(fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
 	// Capture standard output and standard error.
