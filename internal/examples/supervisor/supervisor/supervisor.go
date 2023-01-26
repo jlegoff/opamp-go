@@ -406,7 +406,7 @@ func extractCollector(agentDir string, integrationsDir string, zipped io.Reader)
 			continue
 		}
 
-		fmt.Println("Header", header.Name)
+		//fmt.Println("Header", header.Name)
 		err = extractFile(agentDir, "nrdot", header, tr)
 		if err != nil {
 			return err

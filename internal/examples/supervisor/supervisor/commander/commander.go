@@ -80,11 +80,11 @@ func (c *Commander) Start(ctx context.Context) error {
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
 	c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
 
-	fmt.Println(fmt.Sprintf("NRIA_CONFIG_PATH=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_FILE_PATH)))
-	fmt.Println(fmt.Sprintf("NRIA_AGENT_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_INTEGRATIONS_AGENT_DIR)))
+	//fmt.Println(fmt.Sprintf("NRIA_CONFIG_PATH=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_FILE_PATH)))
+	//fmt.Println(fmt.Sprintf("NRIA_AGENT_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_INTEGRATIONS_AGENT_DIR)))
 	//fmt.Println(fmt.Sprintf("NRIA_CONFIG_DIR=%s", filepath.Join(baseDir, "data", NRINFRA_CONFIG_DIR)))
-	fmt.Println(fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
-	fmt.Println(fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
+	//fmt.Println(fmt.Sprintf("NRIA_PID_FILE=%s", filepath.Join(baseDir, "data", "newrelic-infra.pid")))
+	//fmt.Println(fmt.Sprintf("NRIA_AGENT_PATH=%s", filepath.Join(baseDir, "agent", "newrelic-infra")))
 	// Capture standard output and standard error.
 	c.cmd.Stdout = logFile
 	c.cmd.Stderr = logFile
