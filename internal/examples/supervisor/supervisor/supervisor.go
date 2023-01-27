@@ -48,6 +48,9 @@ receivers:
           scrape_interval: 10s
           static_configs:
             - targets: ['0.0.0.0:8888']
+  otlp:
+    protocols:
+      grpc:
 processors:
   batch:
   resourcedetection:
@@ -81,7 +84,15 @@ service:
   pipelines:
     metrics/own:
       receivers: [prometheus/own]
-      processors: [batch, resourcedetection, resource/own, attributes/own]
+      processors: [resourcedetection, resource/own, attributes/own, batch]
+      exporters: [otlp]
+    metrics/otlp:
+      receivers: [otlp]
+      processors: [resourcedetection, batch]
+      exporters: [otlp]
+    traces/otlp:
+      receivers: [otlp]
+      processors: [resourcedetection, batch]
       exporters: [otlp]
   extensions: [health_check, file_storage]
   telemetry:
@@ -162,6 +173,7 @@ func NewSupervisor(logger types.Logger) (*Supervisor, error) {
 	}
 
 	s.ensureDirExists(s.dataDir)
+	s.ensureDirExists(filepath.Join(s.dataDir, "pixie"))
 	s.ensureInfraDataExists()
 
 	if err := s.loadConfig(); err != nil {
@@ -368,7 +380,7 @@ func (s *Supervisor) installAgent() error {
 			return err
 		}
 		defer resp.Body.Close()
-		err = extractCollector(s.agentDir, filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_BIN_DIR), resp.Body)
+		err = extractCollector(s.agentDir, filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_BIN_DIR), filepath.Join(s.dataDir, "pixie"), resp.Body)
 		if err != nil {
 			return err
 		}
@@ -382,7 +394,7 @@ func getAgentUrl() string {
 		agentVersion, runtime.GOOS, runtime.GOARCH)
 }
 
-func extractCollector(agentDir string, integrationsDir string, zipped io.Reader) error {
+func extractCollector(agentDir string, integrationsDir string, pixieDir string, zipped io.Reader) error {
 	unzipped, err := gzip.NewReader(zipped)
 	defer unzipped.Close()
 	if err != nil {
@@ -415,7 +427,23 @@ func extractCollector(agentDir string, integrationsDir string, zipped io.Reader)
 		if err != nil {
 			return err
 		}
+		err = extractFile(agentDir, "standalone_pem", header, tr)
+		if err != nil {
+			return err
+		}
+		err = extractFile(agentDir, "px", header, tr)
+		if err != nil {
+			return err
+		}
 		err = extractFile(integrationsDir, "nri-flex", header, tr)
+		if err != nil {
+			return err
+		}
+		err = extractFile(integrationsDir, "nri-pixie", header, tr)
+		if err != nil {
+			return err
+		}
+		err = extractFile(pixieDir, "otel_collector.pxl", header, tr)
 		if err != nil {
 			return err
 		}
