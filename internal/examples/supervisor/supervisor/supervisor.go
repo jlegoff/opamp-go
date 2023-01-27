@@ -447,6 +447,10 @@ func extractCollector(agentDir string, integrationsDir string, pixieDir string, 
 		if err != nil {
 			return err
 		}
+		err = extractFile(pixieDir, "jvm.pxl", header, tr)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
