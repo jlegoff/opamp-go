@@ -536,7 +536,7 @@ service:
 }
 
 func isInfraConfig(name string, content *protobufs.AgentConfigFile) bool {
-	return strings.HasPrefix(name, "nrinfra")
+	return strings.HasPrefix(name, "nrinfra") || strings.HasPrefix(name, "MetaAgentModule")
 
 }
 
