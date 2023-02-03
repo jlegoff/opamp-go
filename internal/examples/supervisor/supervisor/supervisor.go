@@ -107,6 +107,7 @@ service:
 
 const INFRA_AGENT_CONFIG = `license_key: {{API_KEY}}
 staging: true
+enable_process_metrics: true
 `
 
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
@@ -536,7 +537,7 @@ service:
 }
 
 func isInfraConfig(name string, content *protobufs.AgentConfigFile) bool {
-	return strings.HasPrefix(name, "nrinfra") || strings.HasPrefix(name, "MetaAgentModule")
+	return strings.HasPrefix(name, "nrinfra") || strings.HasPrefix(name, "MetaAgentModule") || strings.HasPrefix(name, "Pixie")
 
 }
 
@@ -558,6 +559,7 @@ func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfi
 }
 
 func (s *Supervisor) writeInfraIntegrationConfigToFile(filename string, content []byte) {
+	filename = strings.ToLower(strings.ReplaceAll(filename, " ", "_"))
 	path := filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR, fmt.Sprintf("%s.yml", filename))
 	s.logger.Debugf("Writing nr integration path: %s", path)
 	f, err := os.Create(path)
