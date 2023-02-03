@@ -110,6 +110,22 @@ staging: true
 enable_process_metrics: true
 `
 
+const flexApmAttachTemplate = `integrations:
+  - name: nri-flex
+    config:
+        name: %s
+        apis:
+            - name: JavaAttacher
+              event_type: JavaAttacherSample
+              commands:
+                - run: >
+                    curl -s localhost:9999/attach/%d
+`
+
+type ApmAttachConfig struct {
+	Pid int64 `yaml:"pid"`
+}
+
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
 // to work with an OpAMP Server.
 type Supervisor struct {
@@ -536,26 +552,50 @@ service:
 	return configChanged
 }
 
+func isCollectorConfig(name string, content *protobufs.AgentConfigFile) bool {
+	return !isInfraConfig(name, content) && !isDynamicAttachConfig(name, content)
+}
+
 func isInfraConfig(name string, content *protobufs.AgentConfigFile) bool {
 	return strings.HasPrefix(name, "nrinfra") || strings.HasPrefix(name, "MetaAgentModule") || strings.HasPrefix(name, "Pixie")
+}
 
+func isDynamicAttachConfig(name string, content *protobufs.AgentConfigFile) bool {
+	return strings.HasPrefix(name, "APM")
 }
 
 func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfig) error {
 	for name, content := range config.Config.ConfigMap {
-		if !isInfraConfig(name, content) {
+		if !isInfraConfig(name, content) || !isDynamicAttachConfig(name, content) {
 			continue
+		}
+		contentBytes := content.Body
+		if isDynamicAttachConfig(name, content) {
+			// dynamic attach configs are run as OHIs. Content is wrapped as
+			// a flex integration and stored with the rest of the ohis
+			contentBytes = TransformApmConfigToFlex(name, contentBytes)
 		}
 		existingConfig, hasExistingConfig := s.nrIntegrationConfigs[name]
 		if hasExistingConfig {
-			if bytes.Compare(existingConfig, content.Body) == 0 {
+			if bytes.Compare(existingConfig, contentBytes) == 0 {
 				continue
 			}
 		}
-		s.writeInfraIntegrationConfigToFile(name, content.Body)
-		s.nrIntegrationConfigs[name] = content.Body
+		s.writeInfraIntegrationConfigToFile(name, contentBytes)
+		s.nrIntegrationConfigs[name] = contentBytes
 	}
 	return nil
+}
+
+func TransformApmConfigToFlex(name string, content []byte) []byte {
+	k := koanf.New("::")
+	if err := k.Load(rawbytes.Provider(content), yaml.Parser()); err != nil {
+		return nil
+	}
+
+	pid := k.Int("pid")
+	apmConfig := fmt.Sprintf(flexApmAttachTemplate, name, pid)
+	return []byte(apmConfig)
 }
 
 func (s *Supervisor) writeInfraIntegrationConfigToFile(filename string, content []byte) {
@@ -609,7 +649,7 @@ func (s *Supervisor) composeEffectiveConfig(config *protobufs.AgentRemoteConfig)
 			s.logger.Debugf("Applying remote configuration %s", name)
 		}
 		item := config.Config.ConfigMap[name]
-		if item == nil || isInfraConfig(name, item) {
+		if item == nil || !isCollectorConfig(name, item) {
 			continue
 		}
 		var k2 = koanf.New(".")
