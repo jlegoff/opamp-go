@@ -110,6 +110,18 @@ staging: true
 enable_process_metrics: true
 `
 
+const APM_DISCOVERY_FLEX_CONFIG = `integrations:
+  - name: nri-flex
+    config:
+        name: apm-discovery
+        apis:
+            - name: JavaAttacher
+              event_type: JavaAttacherSample
+              commands:
+                - run: >
+                    curl -s localhost:9999/status | jq "flatten" | jq  "map(. + {appName: .applicationNames[0]})"
+`
+
 const flexApmAttachTemplate = `integrations:
   - name: nri-flex
     config:
@@ -326,6 +338,7 @@ func (s *Supervisor) ensureInfraDataExists() {
 		}
 	}
 	s.writeInfraAgentConfigToFile()
+	s.writeApmDiscoveryConfigToFile()
 }
 
 func (s *Supervisor) createInstanceId(dir string) {
@@ -566,7 +579,7 @@ func isDynamicAttachConfig(name string, content *protobufs.AgentConfigFile) bool
 
 func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfig) error {
 	for name, content := range config.Config.ConfigMap {
-		if !isInfraConfig(name, content) || !isDynamicAttachConfig(name, content) {
+		if !isInfraConfig(name, content) && !isDynamicAttachConfig(name, content) {
 			continue
 		}
 		contentBytes := content.Body
@@ -785,6 +798,16 @@ func (s *Supervisor) writeInfraAgentConfigToFile() {
 	defer f.Close()
 
 	f.WriteString(INFRA_AGENT_CONFIG)
+}
+
+func (s *Supervisor) writeApmDiscoveryConfigToFile() {
+	f, err := os.Create(filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR, "nrdefault_apm_discovery.yaml"))
+	if err != nil {
+		s.logger.Errorf("Cannot write apm discovery config file: %v", err)
+	}
+	defer f.Close()
+
+	f.WriteString(APM_DISCOVERY_FLEX_CONFIG)
 }
 
 func (s *Supervisor) Shutdown() {
