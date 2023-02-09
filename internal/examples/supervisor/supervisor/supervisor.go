@@ -134,6 +134,18 @@ const flexApmAttachTemplate = `integrations:
                     curl -s localhost:9999/attach/%d
 `
 
+const flexApmAttachTemplateWithAppName = `integrations:
+  - name: nri-flex
+    config:
+        name: %s
+        apis:
+            - name: JavaAttacher
+              event_type: JavaAttacherSample
+              commands:
+                - run: >
+                    curl -s localhost:9999/attach/%d?appName=%s
+`
+
 type ApmAttachConfig struct {
 	Pid int64 `yaml:"pid"`
 }
@@ -607,7 +619,14 @@ func TransformApmConfigToFlex(name string, content []byte) []byte {
 	}
 
 	pid := k.Int("pid")
-	apmConfig := fmt.Sprintf(flexApmAttachTemplate, name, pid)
+	appName := k.String("appName")
+	var apmConfig string
+	if appName == "" {
+		apmConfig = fmt.Sprintf(flexApmAttachTemplate, name, pid)
+	} else {
+		apmConfig = fmt.Sprintf(flexApmAttachTemplateWithAppName, name, pid, appName)
+	}
+
 	return []byte(apmConfig)
 }
 
