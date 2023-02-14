@@ -35,6 +35,7 @@ const agentType = "io.opentelemetry.collector"
 
 const agentVersion = "0.0.1"
 
+// batch processor makes the server reject entire pixie batches
 const initialAgentConfig = `extensions:
   health_check:
   file_storage:
@@ -92,7 +93,7 @@ service:
       exporters: [otlp]
     traces/otlp:
       receivers: [otlp]
-      processors: [resourcedetection, batch]
+      processors: [resourcedetection]
       exporters: [otlp]
   extensions: [health_check, file_storage]
   telemetry:
@@ -490,6 +491,10 @@ func extractCollector(agentDir string, integrationsDir string, pixieDir string, 
 			return err
 		}
 		err = extractFile(pixieDir, "jvm.pxl", header, tr)
+		if err != nil {
+			return err
+		}
+		err = extractFile(pixieDir, "pii.pxl", header, tr)
 		if err != nil {
 			return err
 		}
