@@ -595,6 +595,7 @@ func isDynamicAttachConfig(name string, content *protobufs.AgentConfigFile) bool
 }
 
 func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfig) error {
+	newNrIntegrationConfigs := make(map[string][]byte)
 	for name, content := range config.Config.ConfigMap {
 		if !isInfraConfig(name, content) && !isDynamicAttachConfig(name, content) {
 			continue
@@ -605,6 +606,7 @@ func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfi
 			// a flex integration and stored with the rest of the ohis
 			contentBytes = TransformApmConfigToFlex(name, contentBytes)
 		}
+		newNrIntegrationConfigs[name] = contentBytes
 		existingConfig, hasExistingConfig := s.nrIntegrationConfigs[name]
 		if hasExistingConfig {
 			if bytes.Compare(existingConfig, contentBytes) == 0 {
@@ -612,9 +614,41 @@ func (s *Supervisor) findAndWriteInfraConfigs(config *protobufs.AgentRemoteConfi
 			}
 		}
 		s.writeInfraIntegrationConfigToFile(name, contentBytes)
-		s.nrIntegrationConfigs[name] = contentBytes
 	}
+	s.nrIntegrationConfigs = newNrIntegrationConfigs
+	s.removeUnusedInfraConfigs()
 	return nil
+}
+
+func (s *Supervisor) removeUnusedInfraConfigs() {
+	// remove all the infra configs that shouldn't be there, i.e.
+	// configs that aren't part of the remote configs and that are not the default configs
+	ohiDir := filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR)
+	files, err := os.ReadDir(ohiDir)
+	if err != nil {
+		fmt.Println("Could not check for Infra configs", err)
+		return
+	}
+	for _, f := range files {
+		if !f.IsDir() {
+			if !s.hasOhi(f.Name()) {
+				fmt.Println("Removing unused config", filepath.Join(ohiDir, f.Name()))
+				os.Remove(filepath.Join(ohiDir, f.Name()))
+			}
+		}
+	}
+}
+
+func (s *Supervisor) hasOhi(filename string) bool {
+	if strings.HasPrefix(filename, "nrdefault") {
+		return true
+	}
+	for configName, _ := range s.nrIntegrationConfigs {
+		if getOhiFileName(configName) == filename {
+			return true
+		}
+	}
+	return false
 }
 
 func TransformApmConfigToFlex(name string, content []byte) []byte {
@@ -635,9 +669,8 @@ func TransformApmConfigToFlex(name string, content []byte) []byte {
 	return []byte(apmConfig)
 }
 
-func (s *Supervisor) writeInfraIntegrationConfigToFile(filename string, content []byte) {
-	filename = strings.ToLower(strings.ReplaceAll(filename, " ", "_"))
-	path := filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR, fmt.Sprintf("%s.yml", filename))
+func (s *Supervisor) writeInfraIntegrationConfigToFile(configName string, content []byte) {
+	path := s.getOhiPath(configName)
 	s.logger.Debugf("Writing nr integration path: %s", path)
 	f, err := os.Create(path)
 	if err != nil {
@@ -646,6 +679,17 @@ func (s *Supervisor) writeInfraIntegrationConfigToFile(filename string, content 
 	defer f.Close()
 
 	f.Write(content)
+}
+
+func (s *Supervisor) getOhiPath(configName string) string {
+	filename := getOhiFileName(configName)
+	path := filepath.Join(s.dataDir, commander.NRINFRA_INTEGRATIONS_CONFIG_DIR, filename)
+	return path
+}
+
+func getOhiFileName(configName string) string {
+	filename := fmt.Sprintf("%s.yml", strings.ToLower(strings.ReplaceAll(configName, " ", "_")))
+	return filename
 }
 
 // composeEffectiveConfig composes the effective config from multiple sources:
